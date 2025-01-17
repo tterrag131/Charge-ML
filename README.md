@@ -6,6 +6,8 @@ Certainly! Here's a README for the ChargePredictor class:
 
 ChargePredictor is a Python class designed to predict charge levels for industrial or organizational systems. It uses a combination of historical data analysis and machine learning techniques to provide accurate predictions for future dates.
 The coding has proven 92% accuracy with an OOB score of 90.232% a formidable score that represents the algorithm understands the underlying patterns presented by the data
+The file ChargePredictor is a setup for individuals to download the code and test run it for themselves, the file works hevially with SMF1 and is designed for their site. Since inceptions SARIMA predicitons have been added which has increased accuracy all the way up to near 98% an incredible feat that offers flawless insight into the inner workings of complicated charge patterns and ever fluid data. 
+These changes have been implemented at SMF1 and have made a predictive impact into out VET calculations and other methods of daily planning.
 
 ## Features
 
