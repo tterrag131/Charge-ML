@@ -1,5 +1,3 @@
-Certainly! Here's a README for the ChargePredictor class:
-
 # ChargePredictor
 
 ## Overview
@@ -12,12 +10,14 @@ These changes have been implemented at SMF1 and have made a predictive impact in
 ## Features
 
 - Data loading and preprocessing from CSV files
+- SARIMA predictive modeling for hevially seasonal data and more attribute based time series data logging and predictons
 - Advanced feature engineering including time-based, holiday, and seasonal features
 - Historical data analysis for specific dates and time periods
 - Day-of-week and monthly average calculations
-- Machine learning model (Random Forest) for prediction
+- Machine learning model (Random Forest & SARIMA) for prediction
 - Combination of traditional and ML-based prediction methods
 - Visualization of predictions and feature importance
+- Includes inputs from other predictive sources such as ALPS
 
 ## Requirements
 
