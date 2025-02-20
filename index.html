@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Charge Prediction Dashboard</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <header>
+            <div class="header-content">
+                <picture class="header-logo-container">
+                    <source 
+                        srcset="https://ledger-prediction-charting-website.s3.us-west-1.amazonaws.com/ATHENALogoD.png"
+                        media="(prefers-color-scheme: dark)">
+                    <img 
+                        src="https://ledger-prediction-charting-website.s3.us-west-1.amazonaws.com/ATHENAlogo.PNG" 
+                        alt="Athena Logo" 
+                        class="header-logo">
+                </picture>
+                <h1></h1>
+            </div>
+            <div class="header-controls">
+                <div class="update-info">
+                    Last Updated: <span id="lastUpdate"></span>
+                    <div class="next-update">
+                        <div class="timer-container">
+                            <div class="timer-bar">
+                                <div class="timer-fill" id="timerFill"></div>
+                            </div>
+                            <span class="timer-text">Next Update: <span id="countdown">--:--</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="theme-toggle">
+                    <button id="themeToggle" class="theme-toggle-btn">
+                        <span class="theme-toggle-icon">🌙</span>
+                    </button>
+                </div>
+            </div>
+            
+        </header>
+        
+
+        <!-- New Unified Metrics Section -->
+        <div class="metrics-container">
+            <div class="unified-metric-card">
+                <div class="card-header">
+                    <h2>Prediction Analysis</h2>
+                    <div class="toggle-switch">
+                        <button id="timeToggleBtn" class="toggle-button">
+                            <span class="toggle-text">View Tomorrow</span>
+                        </button>
+                    </div>
+                </div>
+        
+        
+                <div class="metrics-content">
+                    <!-- Today's View -->
+                    <div id="todayMetrics" class="metric-view active">
+                        <div class="primary-metric">
+                            <div class="metric-group">
+                                <h3>ALPS (IPT) Target (00:00 - 23:00)</h3>
+                                <div class="value-container">
+                                    <span class="metric-value" id="targetValue">--</span>
+                                    <span class="multi-split" id="targetValueMulti">(--)</span>
+                                </div>
+                                <div class="metric-difference" id="targetDifference">
+                                    <span class="difference-label">Expected EOD Difference:</span>
+                                    <span class="difference-value" id="differenceValue">|--</span>
+                                </div>
+                            </div>
+                        </div>
+        
+                        <div class="shift-breakdown">
+                            <!-- Day Shift Section -->
+                            <div class="shift-section">
+                                <h4>Day Shift (06:00-18:00)</h4>
+                                <div class="shift-metrics">
+                                    <div class="metric-item">
+                                        <span class="label">Morning (06:00-12:00):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="daysSarimaMorning">--</span>
+                                            <span class="multi-split" id="daysSarimaMorningMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                    <div class="metric-item">
+                                        <span class="label">Afternoon (12:00-18:00):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="daysSarimaAfternoon">--</span>
+                                            <span class="multi-split" id="daysSarimaAfternoonMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                    <div class="metric-item total-shift">
+                                        <span class="label">Total Day Shift (multis):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="daysSarimaTotal">--</span>
+                                            <span class="multi-split" id="daysSarimaTotalMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                    <div class="metric-item progress-indicator">
+                                        <span class="label">Shipments So Far:</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="dayShiftProgress">--</span>
+                                            <span class="multi-split" id="dayShiftProgressMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+        
+                            <!-- Night Shift Section -->
+                            <div class="shift-section">
+                                <h4>Night Shift (18:00-06:00)</h4>
+                                <div class="shift-metrics">
+                                    <div class="metric-item">
+                                        <span class="label">Tonight (18:00-23:00):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="nightsSarimaToday">--</span>
+                                            <span class="multi-split" id="nightsSarimaTodayMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                    <div class="metric-item">
+                                        <span class="label">Tomorrow (00:00-06:00):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="nightsSarimaTomorrow">--</span>
+                                            <span class="multi-split" id="nightsSarimaTomorrowMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                    <div class="metric-item total-shift">
+                                        <span class="label">Total Night Shift (multis):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="nightsSarimaTotal">--</span>
+                                            <span class="multi-split" id="nightsSarimaTotalMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+        
+                        <!-- Processing Metrics Section -->
+                        <div class="processing-metrics">
+                            <div class="metric-group">
+                                <h4>Processing Analysis</h4>
+                                <div class="metric-item">
+                                    <span class="label">Shipments vs New Workable:</span>
+                                    <span class="value-container">
+                                        <span class="total-value" id="processingRate">--</span>
+                                        <span class="multi-split" id="processingRateMulti">(--)</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tomorrow's View -->
+                    <div id="tomorrowMetrics" class="metric-view">
+                        <div class="primary-metric">
+                            <div class="metric-group">
+                                <h3>Tomorrow's Prediction</h3>
+                                <div class="prediction-input-group">
+                                    <input type="number" id="userPrediction" 
+                                           placeholder="Enter ALPS forecast" 
+                                           class="prediction-input">
+                                    <!-- Add Multi-Unit Input -->
+                                    <div class="multi-prediction">
+                                        <span class="multi-label">Expected Multi %:</span>
+                                        <span class="multi-value" id="targetMultiPercentage">--</span>
+                                    </div>
+                                </div>
+                                <div class="metric-difference" id="tomorrowPredictionDifference">--</div>
+                            </div>
+                        </div>
+                    
+                        <div class="shift-breakdown">
+                            <!-- Day Shift Section -->
+                            <div class="shift-section">
+                                <h4>Day Shift (06:00-18:00)</h4>
+                                <div class="shift-metrics">
+                                    <div class="metric-item">
+                                        <span class="label">Morning (06:00-12:00):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="tomorrowDayMorning">--</span>
+                                            <span class="multi-split" id="tomorrowDayMorningMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                    <div class="metric-item">
+                                        <span class="label">Afternoon (12:00-18:00):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="tomorrowDayAfternoon">--</span>
+                                            <span class="multi-split" id="tomorrowDayAfternoonMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                    <div class="metric-item total-shift">
+                                        <span class="label">Total Day Shift:</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="tomorrowDayTotal">--</span>
+                                            <span class="multi-split" id="tomorrowDayTotalMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                    
+                            <!-- Night Shift Section -->
+                            <div class="shift-section">
+                                <h4>Night Shift (18:00-06:00)</h4>
+                                <div class="shift-metrics">
+                                    <div class="metric-item">
+                                        <span class="label">Tomorrow Night (18:00-23:00):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="tomorrowNightFirst">--</span>
+                                            <span class="multi-split" id="tomorrowNightFirstMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                    <div class="metric-item">
+                                        <span class="label">Early Morning (00:00-06:00):</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="todayEarlyMorning">--</span>
+                                            <span class="multi-split" id="todayEarlyMorningMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                    <div class="metric-item total-shift">
+                                        <span class="label">Total Night Shift:</span>
+                                        <span class="value-container">
+                                            <span class="total-value" id="tomorrowNightTotal">--</span>
+                                            <span class="multi-split" id="tomorrowNightTotalMulti">(--)</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- New Multi-Unit Analysis Panel -->
+                    <div class="multi-metrics-panel">
+                        <h3>Multi-Unit Analysis</h3>
+                        <div class="multi-metrics-content">
+                            <div class="multi-metric-item">
+                                <span class="label">Current Processing %:</span>
+                                <span class="value" id="currentIPTM">--</span>
+                            </div>
+                            <div class="multi-metric-item">
+                                <span class="label">Multi Goal:</span>
+                                <span class="value" id="multiIPT">--</span>
+                            </div>
+                            <div class="multi-metric-item">
+                                <span class="label">Shipped %:</span>
+                                <span class="value" id="currentMSSF">--</span>
+                                <span class="progress-indicator" id="mssfProgress"></span>
+                            </div>
+                        </div>
+                        <div class="multi-progress-details">
+                            <div class="progress-comparison">
+                                <div class="time-progress">
+                                    <span class="label">Day Progress:</span>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="dayProgressFill"></div>
+                                    </div>
+                                    <span class="value" id="dayProgressValue">--</span>
+                                </div>
+                                <div class="multi-progress">
+                                    <span class="label">Multi Progress:</span>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="multiProgressFill"></div>
+                                    </div>
+                                    <span class="value" id="multiProgressValue">--</span>
+                                </div>
+                            </div>
+                            <div class="progress-status" id="progressStatus">
+                                <!-- Status will be inserted here -->
+                            </div>
+                        </div>
+                    </div>
+                                    
+                </div>
+            </div>
+        </div>
+
+
+        <div class="charts-container">
+            <div class="main-chart chart-card">
+                <h2>Today's Prediction</h2>
+                <div class="chart-wrapper">
+                    <canvas id="predictionChart"></canvas>
+                </div>
+            </div>
+            <div class="charts-split-container">
+                <div class="half-width chart-card">
+                    <h2>Tomorrow's Prediction</h2>
+                    <!-- Remove the duplicate prediction input section -->
+                    <div class="chart-wrapper">
+                        <canvas id="tomorrowPredictionChart"></canvas>
+                    </div>
+                </div>
+                <div class="half-width chart-card">
+                    <h2>Back Log</h2>
+                    <div class="chart-wrapper">
+                        <canvas id="backlogChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="comparison-charts">
+                <div class="chart-card">
+                    <h2>Year-Over-Year Comparison</h2>
+                    <div class="chart-wrapper">
+                        <canvas id="comparisonChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h2>Model Comparison</h2>
+                    <div class="chart-wrapper">
+                        <canvas id="modelComparisonChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="upload-section chart-card">
+            <h2>Data Upload</h2>
+            <div class="upload-container">
+                <div class="upload-box">
+                    <h3>Combine.csv Upload</h3>
+                    <input type="file" id="combineFile" accept=".csv" class="file-input" />
+                    <div class="upload-status" id="combineStatus"></div>
+                </div>
+                <div class="upload-box">
+                    <h3>Granular.csv Upload</h3>
+                    <input type="file" id="granularFile" accept=".csv" class="file-input" />
+                    <div class="upload-status" id="granularStatus"></div>
+                </div>
+                <button id="uploadButton" class="upload-btn">Upload Files</button>
+                <!-- Add this to your HTML where you want the collection button to appear -->
+                <div class="auto-collect-box">
+                    <h3>Automatic Data Collection</h3>
+                    <button id="collectDataBtn" class="collect-btn">Collect New Data</button>
+                    <div class="collection-status" id="collectionStatus"></div>
+                </div>
+
+            </div>
+            <div id="uploadMessage" class="upload-message"></div>
+        </div>
+        
+    </div>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1001.0.min.js"></script>
+    <script src="scripts/chart.js"></script>
+</body>
+</html>
