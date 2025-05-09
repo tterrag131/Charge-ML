@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATHENA PDP Calculator</title>   
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/pdp.css">
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header Section -->
+        <div class="release-banner">
+            ATHENA is in FINAL dev Release date : 4/11/2025
+        </div>
+        <header>
+            <div class="header-content">
+                <picture class="header-logo-container">
+                    <source 
+                        srcset="https://ledger-prediction-charting-website.s3.us-west-1.amazonaws.com/ATHENALogoD.png"
+                        media="(prefers-color-scheme: dark)">
+                    <img 
+                        src="https://ledger-prediction-charting-website.s3.us-west-1.amazonaws.com/ATHENAlogo.PNG" 
+                        alt="Athena Logo" 
+                        class="header-logo">
+                </picture>
+            </div>
+            <div class="header-controls">
+                <div class="update-info">
+                    Last Updated: <span id="lastUpdate"></span>
+                    <div class="next-update">
+                        <div class="timer-container">
+                            <div class="timer-bar">
+                                <div class="timer-fill" id="timerFill"></div>
+                            </div>
+                            <span class="timer-text">Next Update: <span id="countdown">--:--</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="theme-toggle">
+                    <button id="themeToggle" class="theme-toggle-btn">
+                        <span class="theme-toggle-icon">🌙</span>
+                    </button>
+                </div>
+                <div class="page-navigation">
+                    <a href="index.html" class="nav-link">Dashboard</a>
+                    <a href="pdp.html" class="nav-link active">PDP</a>
+                </div>
+            </div>
+        </header>
+        <!-- Main PDP Container -->
+        <div class="pdp-container">
+            <div class="top-section">
+            <!-- Volume Overview Section -->
+                <section class="card volume-section">
+                    <div class="section-header">
+                        <h2>Volume Overview</h2>
+                    </div>
+                    <div class="volume-total">
+                        <h3>Total Predicted Volume: <span id="total-volume-display">--</span></h3>
+                    </div>
+                    <div class="volume-metrics">
+                        <div class="volume-card multi">
+                            <h4>Multi-Unit Volume</h4>
+                            <div class="volume-value" id="multi-volume">--</div>
+                            <div class="volume-percentage" id="multi-percentage">--%</div>
+                        </div>
+                        <div class="volume-card singles">
+                            <h4>Singles Volume</h4>
+                            <div class="volume-value" id="singles-volume">--</div>
+                            <div class="volume-percentage" id="singles-percentage">--%</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- Right Card: Process Configuration -->
+                <section class="card config-section">
+                    <div class="config-header">
+                        <h2>Process Configuration</h2>
+                        <button id="reset-rates" class="mini-button">Reset to Defaults</button>
+                    </div>
+                    <div class="process-config">
+                        <!-- Volume Distribution -->
+                        <div class="config-group">
+                            <h4>Volume Distribution</h4>
+                            <div class="input-group">
+                                <label>Multi/Singles:</label>
+                                <div class="split-input">
+                                    <input type="number" id="multi-split" min="0" max="100" value="65">
+                                    <span class="unit">%</span>
+                                    <button id="reset-split" class="micro-button">Reset</button>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>AFE1/AFE2:</label>
+                                <div class="split-input">
+                                    <input type="number" id="afe1-split" min="0" max="100" value="45">
+                                    <span class="unit">/</span>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>SmartPac:</label>
+                                <div class="split-input">
+                                    <input type="number" id="smartpac-split" min="0" max="100" value="40">
+                                    <span class="unit">% of Singles</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pick & Transship -->
+                        <div class="config-group">
+                            <h4>Pick & Transship</h4>
+                            <div class="input-group">
+                                <label>Pick Rate:</label>
+                                <div class="rate-input">
+                                    <input type="number" id="pick-rate" value="300">
+                                    <span class="unit">units/hr</span>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>Transship:</label>
+                                <div class="rate-input">
+                                    <input type="number" id="transship-rate" value="8000">
+                                    <span class="unit">units/shift</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Singles Processing -->
+                        <div class="config-group">
+                            <h4>Singles Processing</h4>
+                            <div class="input-group">
+                                <label>SIOC:</label>
+                                <div class="rate-input">
+                                    <input type="number" id="sioc-rate" value="350">
+                                    <span class="unit">units/hr</span>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>Pack Small:</label>
+                                <div class="rate-input">
+                                    <input type="number" id="small-rate" value="180">
+                                    <span class="unit">units/hr</span>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>Pack Mix:</label>
+                                <div class="rate-input">
+                                    <input type="number" id="mix-rate" value="70">
+                                    <span class="unit">units/hr</span>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>SmartPac:</label>
+                                <div class="rate-input">
+                                    <input type="number" id="smartpac-rate" value="450">
+                                    <span class="unit">units/hr</span>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>SmartPac Poly:</label>
+                                <div class="rate-input">
+                                    <input type="number" id="smartpac-poly-rate" value="450">
+                                    <span class="unit">units/hr</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="calculation-controls">
+                        <button id="calculate-pdp" class="primary-button">
+                            Calculate Headcount
+                        </button>
+                    </div>
+                </section>
+            </div>
+            <div class="rolling-forecast">
+                <h3>48-Hour Rolling Forecast</h3>
+                <div class="forecast-bars">
+                    <div class="forecast-bar" id="current-shift">
+                        <div class="bar-fill"></div>
+                        <div class="bar-label"></div>
+                    </div>
+                    <div class="forecast-bar" id="next-shift-1">
+                        <div class="bar-fill"></div>
+                        <div class="bar-label"></div>
+                    </div>
+                    <div class="forecast-bar" id="next-shift-2">
+                        <div class="bar-fill"></div>
+                        <div class="bar-label"></div>
+                    </div>
+                    <div class="forecast-bar" id="next-shift-3">
+                        <div class="bar-fill"></div>
+                        <div class="bar-label"></div>
+                    </div>
+                </div>
+            </div>
+            
+                
+            <!-- Headcount Results Section -->
+            <section class="card headcount-section">
+                <div class="section-header">
+                    <h2>Required Headcount</h2>
+                </div>
+                <div class="headcount-grid">
+                    <!-- Pick Card -->
+                    <div class="headcount-card pick">
+                        <h3>Pick</h3>
+                        <div class="shift-breakdown">
+                            <div class="day-shift">
+                                <h4>Day Shift</h4>
+                                <div class="half-shifts-container">
+                                    <div class="half-shift">
+                                        <span>First Half <span class="shift-time"></span>:</span>
+                                        <span id="pick-ds1-hc" class="hc-value">--</span>
+                                    </div>
+                                    <div class="half-shift">
+                                        <span>Second Half <span class="shift-time"></span>:</span>
+                                        <span id="pick-ds2-hc" class="hc-value">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="night-shift">
+                                <h4>Night Shift</h4>
+                                <div class="half-shifts-container">
+                                    <div class="half-shift">
+                                        <span>First Half <span class="shift-time"></span>:</span>
+                                        <span id="pick-ns1-hc" class="hc-value">--</span>
+                                    </div>
+                                    <div class="half-shift">
+                                        <span>Second Half <span class="shift-time"></span>:</span>
+                                        <span id="pick-ns2-hc" class="hc-value">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- AFE1 Card -->
+                    <div class="headcount-card afe1">
+                        <h2>AFE1</h2>
+                        <div class="shift-breakdown">
+                            <div class="day-shift">
+                                <h3>Day Shift</h3>
+                                <div class="half-shifts-container">
+                                    <!-- First Half -->
+                                    <div class="station-breakdown">
+                                        <h5>First Half <span class="shift-time"></span></h5>
+                                        <div class="stations-group">
+                                            <div class="station">
+                                                <span>Induct:</span>
+                                                <span id="afe1-ds1-induct" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Rebin:</span>
+                                                <span id="afe1-ds1-rebin" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Pack:</span>
+                                                <span id="afe1-ds1-pack" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station-total">
+                                                <span>Total HC:</span>
+                                                <span id="afe1-ds1-total" class="hc-value total">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                    
+                                    <!-- Second Half -->
+                                    <div class="station-breakdown">
+                                        <h5>Second Half <span class="shift-time"></span></h5>
+                                        <div class="stations-group">
+                                            <div class="station">
+                                                <span>Induct:</span>
+                                                <span id="afe1-ds2-induct" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Rebin:</span>
+                                                <span id="afe1-ds2-rebin" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Pack:</span>
+                                                <span id="afe1-ds2-pack" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station-total">
+                                                <span>Total HC:</span>
+                                                <span id="afe1-ds2-total" class="hc-value total">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="night-shift">
+                                <h3>Night Shift</h3>
+                                <div class="half-shifts-container">
+                                    <!-- First Half -->
+                                    <div class="station-breakdown">
+                                        <h5>First Half <span class="shift-time"></span></h5>
+                                        <div class="stations-group">
+                                            <div class="station">
+                                                <span>Induct:</span>
+                                                <span id="afe1-ns1-induct" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Rebin:</span>
+                                                <span id="afe1-ns1-rebin" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Pack:</span>
+                                                <span id="afe1-ns1-pack" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station-total">
+                                                <span>Total HC:</span>
+                                                <span id="afe1-ns1-total" class="hc-value total">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                    
+                                    <!-- Second Half -->
+                                    <div class="station-breakdown">
+                                        <h5>Second Half <span class="shift-time"></span></h5>
+                                        <div class="stations-group">
+                                            <div class="station">
+                                                <span>Induct:</span>
+                                                <span id="afe1-ns2-induct" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Rebin:</span>
+                                                <span id="afe1-ns2-rebin" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Pack:</span>
+                                                <span id="afe1-ns2-pack" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station-total">
+                                                <span>Total HC:</span>
+                                                <span id="afe1-ns2-total" class="hc-value total">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- AFE1 Card -->
+                    <div class="headcount-card afe2">
+                        <h2>AFE2</h2>
+                        <div class="shift-breakdown">
+                            <div class="day-shift">
+                                <h3>Day Shift</h3>
+                                <div class="half-shifts-container">
+                                    <!-- First Half -->
+                                    <div class="station-breakdown">
+                                        <h5>First Half <span class="shift-time"></span></h5>
+                                        <div class="stations-group">
+                                            <div class="station">
+                                                <span>Induct:</span>
+                                                <span id="afe2-ds1-induct" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Rebin:</span>
+                                                <span id="afe2-ds1-rebin" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Pack:</span>
+                                                <span id="afe2-ds1-pack" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station-total">
+                                                <span>Total HC:</span>
+                                                <span id="afe2-ds1-total" class="hc-value total">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                    
+                                    <!-- Second Half -->
+                                    <div class="station-breakdown">
+                                        <h5>Second Half <span class="shift-time"></span></h5>
+                                        <div class="stations-group">
+                                            <div class="station">
+                                                <span>Induct:</span>
+                                                <span id="afe2-ds2-induct" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Rebin:</span>
+                                                <span id="afe2-ds2-rebin" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Pack:</span>
+                                                <span id="afe2-ds2-pack" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station-total">
+                                                <span>Total HC:</span>
+                                                <span id="afe2-ds2-total" class="hc-value total">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="night-shift">
+                                <h3>Night Shift</h3>
+                                <div class="half-shifts-container">
+                                    <!-- First Half -->
+                                    <div class="station-breakdown">
+                                        <h5>First Half <span class="shift-time"></span></h5>
+                                        <div class="stations-group">
+                                            <div class="station">
+                                                <span>Induct:</span>
+                                                <span id="afe2-ns1-induct" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Rebin:</span>
+                                                <span id="afe2-ns1-rebin" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Pack:</span>
+                                                <span id="afe2-ns1-pack" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station-total">
+                                                <span>Total HC:</span>
+                                                <span id="afe2-ns1-total" class="hc-value total">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                    
+                                    <!-- Second Half -->
+                                    <div class="station-breakdown">
+                                        <h5>Second Half <span class="shift-time"></span></h5>
+                                        <div class="stations-group">
+                                            <div class="station">
+                                                <span>Induct:</span>
+                                                <span id="afe2-ns2-induct" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Rebin:</span>
+                                                <span id="afe2-ns2-rebin" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station">
+                                                <span>Pack:</span>
+                                                <span id="afe2-ns2-pack" class="hc-value">--</span>
+                                            </div>
+                                            <div class="station-total">
+                                                <span>Total HC:</span>
+                                                <span id="afe2-ns2-total" class="hc-value total">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Singles Card -->
+                    <div class="headcount-card singles">
+                        <h2>Singles</h2>
+                        <div class="shift-breakdown">
+                            <!-- Day Shift -->
+                            <div class="day-shift">
+                                <h4>Day Shift First Half</h4>
+                                <div class="process-paths">
+                                    <div class="path-group">
+                                        <h5>Regular Singles</h5>
+                                        <div class="path-detail">
+                                            <div class="path-row">
+                                                <span>SIOC:</span>
+                                                <span id="sioc-ds1-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Singles Small:</span>
+                                                <span id="smallPack-ds1-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Singles Mix:</span>
+                                                <span id="mixPack-ds1-hc" class="hc-value">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="path-group">
+                                        <h5>SmartPac</h5>
+                                        <div class="path-detail">
+                                            <div class="path-row">
+                                                <span>Standard:</span>
+                                                <span id="smartPac-ds1-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Poly:</span>
+                                                <span id="smartPacPoly-ds1-hc" class="hc-value">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="path-total">
+                                        <span>Total Singles HC:</span>
+                                        <span id="singles-ds1-total" class="hc-value total">--</span>
+                                    </div>
+                                </div>
+                                <!-- Second Half -->
+                                <h4>Day Shift Second Half </h4>
+                                <div class="process-paths">
+                                    <div class="path-group">
+                                        <h5>Regular Singles</h5>
+                                        <div class="path-detail">
+                                            <div class="path-row">
+                                                <span>SIOC:</span>
+                                                <span id="sioc-ds2-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Singles Small:</span>
+                                                <span id="smallPack-ds2-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Singles Mix:</span>
+                                                <span id="mixPack-ds2-hc" class="hc-value">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="path-group">
+                                        <h5>SmartPac</h5>
+                                        <div class="path-detail">
+                                            <div class="path-row">
+                                                <span>Standard:</span>
+                                                <span id="smartPac-ds2-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Poly:</span>
+                                                <span id="smartPacPoly-ds2-hc" class="hc-value">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="path-total">
+                                        <span>Total Singles HC:</span>
+                                        <span id="singles-ds2-total" class="hc-value total">--</span>
+                                    </div>
+                                </div>                            
+                            </div>
+                            <!-- Night Shift -->
+                            <div class="night-shift">
+                                <h4>Night Shift First Half</h4>
+                                <div class="process-paths">
+                                    <div class="path-group">
+                                        <h5>Regular Singles</h5>
+                                        <div class="path-detail">
+                                            <div class="path-row">
+                                                <span>SIOC:</span>
+                                                <span id="sioc-ns1-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Singles Small:</span>
+                                                <span id="smallPack-ns1-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Singles Mix:</span>
+                                                <span id="mixPack-ns1-hc" class="hc-value">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="path-group">
+                                        <h5>SmartPac</h5>
+                                        <div class="path-detail">
+                                            <div class="path-row">
+                                                <span>Standard:</span>
+                                                <span id="smartPac-ns1-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Poly:</span>
+                                                <span id="smartPacPoly-ns1-hc" class="hc-value">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="path-total">
+                                        <span>Total Singles HC:</span>
+                                        <span id="singles-ns1-total" class="hc-value total">--</span>
+                                    </div>
+                                </div>
+                                <!-- Second Half -->
+                                <h4>Night Shift Second Half</h4>
+                                <div class="process-paths">
+                                    <div class="path-group">
+                                        <h5>Regular Singles</h5>
+                                        <div class="path-detail">
+                                            <div class="path-row">
+                                                <span>SIOC:</span>
+                                                <span id="sioc-ns2-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Singles Small:</span>
+                                                <span id="smallPack-ns2-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Singles Mix:</span>
+                                                <span id="mixPack-ns2-hc" class="hc-value">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="path-group">
+                                        <h5>SmartPac</h5>
+                                        <div class="path-detail">
+                                            <div class="path-row">
+                                                <span>Standard:</span>
+                                                <span id="smartPac-ns2-hc" class="hc-value">--</span>
+                                            </div>
+                                            <div class="path-row">
+                                                <span>Poly:</span>
+                                                <span id="smartPacPoly-ns2-hc" class="hc-value">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="path-total">
+                                        <span>Total Singles HC:</span>
+                                        <span id="singles-ns2-total" class="hc-value total">--</span>
+                                    </div>
+                                </div>                     
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="scripts/constants.js"></script>
+    <script src="scripts/helpers/logger.js"></script>
+    <script src="scripts/helpers/ui-helpers.js"></script>
+    <script src="scripts/helpers/data-validator.js"></script>
+    <script src="scripts/pdp.js"></script>
+</body>
+</html>
