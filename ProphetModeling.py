@@ -1,8 +1,7 @@
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import OneHotEncoder
 from collections import defaultdict
 import xlwings as xw
 import os
@@ -42,7 +41,7 @@ def check_environment():
             raise Exception("Python 3.9 or later is required")
             
         # Check required packages
-        required_packages = ['pandas', 'numpy', 'sklearn', 'xlwings', 'holidays', 'prophet']
+        required_packages = ['pandas', 'numpy', 'xlwings', 'holidays', 'prophet']
         for package in required_packages:
             try:
                 __import__(package)
@@ -60,7 +59,7 @@ def check_environment():
 
 class ChargePredictor:
     """
-    A class to predict charge levels using a combination of Prophet and Random Forest models,
+    A class to predict charge levels using a combination of Prophet,
     incorporating external network predictions and historical data.
     """
     def __init__(self):
@@ -108,7 +107,6 @@ class ChargePredictor:
             
             # Train models
             self.train_prophet_model()
-            self.train_rf_model()
             
         except Exception as e:
             print(f"Error in ChargePredictor initialization: {str(e)}")
@@ -124,7 +122,7 @@ class ChargePredictor:
         of 'Workable' volume, resetting to zero at the start of each day. This is the primary
         target for the Prophet model.
         """
-        # Feature Engineering for both Prophet (implicitly via time index) and RF
+        # Feature Engineering for Prophet (implicitly via time index)
         self.df['Hour'] = self.df['Time'].dt.hour
         self.df['DayOfWeek'] = self.df['Time'].dt.day_name()
         self.df['Month'] = self.df['Time'].dt.month
@@ -158,16 +156,6 @@ class ChargePredictor:
             # though user indicated it resets to 0. It's a robust way.
             # However, since the user stated "grows from zero each day", we explicitly force 0 for 00:00
             # for the *increase*, and handle the cumulative sum starting from 0.
-            
-            # The first value of the group (which is the 00:00 hour if data is aligned)
-            # should effectively have an increase of 0 from the prior day's reset.
-            # The value at 01:00 is its actual 'Workable' total minus 00:00 'Workable'.
-            
-            # For the true hourly increment, if 'Workable' is cumulative and resets to 0 at midnight:
-            # The value at 00:00 should be 0.
-            # The value at 01:00 is value_at_01:00. Its increase is (value_at_01:00 - value_at_00:00)
-            # which is (value_at_01:00 - 0) = value_at_01:00.
-            # The value at 00:00 itself has no *increase* from the prior day.
             
             # Let's clarify: `diff()` gives `NaN` for the first entry of each group.
             # For 00:00, we explicitly set `Hourly_Increase` to 0.
@@ -262,111 +250,6 @@ class ChargePredictor:
             print(f"Error in train_prophet_model: {str(e)}") 
             raise
 
-    def train_rf_model(self):
-        """
-        Trains a Random Forest model on the cumulative 'Workable' volume.
-        This model serves as an alternative prediction source alongside Prophet.
-        """
-        try:
-            # Define features for Random Forest
-            self.rf_features = ['Hour', 'Month', 'WeekOfYear', 'IsWeekend', 
-                                'IsHoliday', 'IsNearHoliday', 'IsPeakHour']
-            
-            # One-hot encode categorical variables ('DayOfWeek', 'Season')
-            categorical_features = ['DayOfWeek', 'Season']
-            
-            # Store unique categories for consistent encoding during prediction
-            self.day_categories = sorted(self.df['DayOfWeek'].unique())
-            self.season_categories = sorted(self.df['Season'].unique())
-            
-            # Initialize and fit the OneHotEncoder
-            self.encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-            self.encoder.fit(self.df[categorical_features])
-            
-            # Get encoded feature names for reference (useful for feature importance analysis)
-            self.encoded_feature_names = self.encoder.get_feature_names_out(categorical_features)
-            
-            # Prepare training data (X: features, y: Workable - cumulative total)
-            X_categorical = self.encoder.transform(self.df[categorical_features])
-            X_numerical = self.df[self.rf_features].values
-            X = np.hstack([X_numerical, X_categorical])
-            y = self.df['Workable'].values
-            
-            # Initialize and train Random Forest Regressor
-            self.rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
-            self.rf_model.fit(X, y)
-            print("RF Model training completed")
-            print(f"Number of features used by RF: {X.shape[1]}")
-            
-        except Exception as e:
-            print(f"Error in train_rf_model: {str(e)}")
-            traceback.print_exc()
-
-    def get_rf_predictions(self):
-        """
-        Generates 24-hour Random Forest predictions for the target date.
-        Applies post-processing to ensure predictions are non-decreasing and start from zero.
-        """
-        try:
-            # Create datetime range for the target date (24 hours)
-            pred_range = pd.date_range(
-                start=self.target_date.replace(hour=0),
-                periods=24,
-                freq='h'
-            )
-            
-            # Prepare features for RF prediction
-            prediction_data = []
-            for dt in pred_range:
-                features_dict = {
-                    'Hour': dt.hour,
-                    'Month': dt.month,
-                    'WeekOfYear': dt.isocalendar().week.astype(int),
-                    'IsWeekend': 1 if dt.weekday() >= 5 else 0,
-                    'IsHoliday': 1 if dt.date() in us_holidays() else 0,
-                    'IsNearHoliday': 1 if self._is_near_holiday({'Time': dt}) else 0,
-                    'IsPeakHour': 1 if dt.hour in [9, 10, 11, 13, 14, 15] else 0,
-                    'DayOfWeek': dt.day_name(),
-                    'Season': self._get_season(dt.month)
-                }
-                prediction_data.append(features_dict)
-            
-            pred_df = pd.DataFrame(prediction_data)
-            
-            X_numerical = pred_df[self.rf_features].values
-            X_categorical = self.encoder.transform(pred_df[['DayOfWeek', 'Season']])
-            X = np.hstack([X_numerical, X_categorical])
-            
-            # Make raw RF predictions (these are cumulative totals)
-            predictions = self.rf_model.predict(X)
-            
-            # Post-process RF predictions:
-            # 1. Ensure starts at 0 at midnight.
-            # 2. Ensure it's strictly non-decreasing.
-            adjusted_predictions = []
-            cumulative_val = 0
-            for i, pred_val in enumerate(predictions):
-                if i == 0: # Force 0 at midnight
-                    adjusted_predictions.append(0)
-                    cumulative_val = 0
-                else:
-                    # Current prediction must be at least the previous cumulative value, and non-negative
-                    current_cumulative_pred = max(cumulative_val, pred_val, 0) 
-                    adjusted_predictions.append(np.round(current_cumulative_pred))
-                    cumulative_val = current_cumulative_pred
-
-            results_df = pd.DataFrame({
-                'Time': pred_range.strftime('%Y-%m-%dT%H:00'),
-                'RF_Prediction': adjusted_predictions
-            })
-            
-            return results_df
-            
-        except Exception as e:
-            print(f"Error in get_rf_predictions: {str(e)}")
-            traceback.print_exc()
-            return pd.DataFrame()
-
     def get_extended_rolling_predictions(self):
         """
         Generates 48-hour rolling predictions starting from the current hour.
@@ -422,8 +305,6 @@ class ChargePredictor:
                     # Calculate Prophet's base daily total for this specific predicted day
                     # To do this correctly, we'd need to predict the whole day's increases first,
                     # sum them, and then apply scaling.
-                    # For simplicity here, we'll re-calculate full-day Prophet prediction within loop if needed.
-                    
                     # Instead, leverage predict_next_day_enhanced for full future days
                     # and blend its output directly.
                     
@@ -434,7 +315,6 @@ class ChargePredictor:
                         full_next_day_preds_df = self.predict_next_day_enhanced(target_time.replace(hour=0))
                         
                         # Append these predictions and then jump the loop to skip individual hour calculations for this day
-                        # This assumes full_next_day_preds_df covers 24 hours.
                         final_predictions_list.extend(full_next_day_preds_df.to_dict(orient='records'))
                         
                         # Skip the remaining hours of this day in the current loop iteration
@@ -472,7 +352,7 @@ class ChargePredictor:
     def generate_rolling_predictions(self):
         """
         Generates and formats all prediction data into a single JSON structure.
-        This method orchestrates fetching predictions from Prophet, RF, historical data,
+        This method orchestrates fetching predictions from Prophet, historical data,
         and ledger information, then compiles them into the desired output format.
         """
         try:
@@ -497,10 +377,7 @@ class ChargePredictor:
             
             # Get actual data for the current day up to the current hour
             current_day_records = self.get_current_day_data(current_time=datetime.combine(current_time.date(), datetime.min.time()))
-
-            # Get RF predictions for the current day (24 hours)
-            rf_results = self.get_rf_predictions()
-
+            
             # Get Prophet predictions without same-day actuals influence (for comparison)
             no_same_day_current = self.predict_without_same_day_influence(current_time)
 
@@ -514,7 +391,6 @@ class ChargePredictor:
                     "date": self.target_date.strftime("%Y-%m-%d"),
                     "network_prediction": self.network_prediction,
                     "sarima_predictions": prophet_results_current_day_full.to_dict(orient='records') if prophet_results_current_day_full is not None else [],
-                    "rf_predictions": rf_results.to_dict(orient='records') if rf_results is not None else [],
                     "predictions_no_same_day": no_same_day_current.to_dict(orient='records') if no_same_day_current is not None else [],
                     "previous_year_data": prev_year_records,
                     "current_day_data": current_day_records
@@ -522,7 +398,6 @@ class ChargePredictor:
                 "next_day": {
                     "date": next_day_target_date.strftime("%Y-%m-%d"),
                     "sarima_predictions": next_day_prophet_enhanced_full.to_dict(orient='records') if next_day_prophet_enhanced_full is not None else [],
-                    "rf_predictions": rf_results.to_dict(orient='records') if rf_results is not None else [], 
                     "previous_year_data": next_day_prev_year_records
                 },
                 "extended_predictions": {
@@ -537,10 +412,12 @@ class ChargePredictor:
                 "current_day_final_prophet_total": prophet_results_current_day_full['Predicted_Workable'].iloc[-1] if prophet_results_current_day_full is not None and not prophet_results_current_day_full.empty else 0,
                 "next_day_final_prophet_total": next_day_prophet_enhanced_full['Predicted_Workable'].iloc[-1] if next_day_prophet_enhanced_full is not None and not next_day_prophet_enhanced_full.empty else 0,
                 "network_prediction_target": self.network_prediction,
-                "rf_current_day_final_total": rf_results['RF_Prediction'].iloc[-1] if rf_results is not None and not rf_results.empty else 0,
                 "next_day_expected_increase_from_prophet": (next_day_prophet_enhanced_full['Predicted_Workable'].iloc[-1] - next_day_prophet_enhanced_full['Predicted_Workable'].iloc[0]) if next_day_prophet_enhanced_full is not None and not next_day_prophet_enhanced_full.empty else 0
             }
 
+            # Generate LLM Feed insights
+            llm_feed_content = self.generate_llm_feed(json_data, current_time) # Pass current_time
+            json_data["LLMfeed"] = llm_feed_content
 
             return json_data
             
@@ -1009,10 +886,10 @@ class ChargePredictor:
                         'DateOnly': date_only_val,
                         'BlockVolume': block_volume
                     })
-
+    
             block_data_df = pd.DataFrame(all_block_data_points)
             days_of_week_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
+    
             # Calculate trends for each 3-hour block
             if not block_data_df.empty:
                 for day_name in days_of_week_order:
@@ -1022,7 +899,7 @@ class ChargePredictor:
                             (block_data_df['DayName'] == day_name) &
                             (block_data_df['BlockLabelSuffix'] == block_label_suffix)
                         ].sort_values(by='DateOnly', ascending=False)
-
+    
                         avg_vol_long, avg_vol_short, last_occurrence_vol, trend_pct_change = 0, 0, 0, 0.0
                         if not specific_block_occurrences.empty:
                             long_term_avg_occurrences = specific_block_occurrences.head(num_weeks_for_avg)
@@ -1049,68 +926,68 @@ class ChargePredictor:
                             "last_occurrence_volume": 0,
                             "trend_direction_pct_change": 0.0
                         }
-
-            # Calculate daily total trends
-            daily_totals_df = pd.DataFrame()
-            if not block_data_df.empty:
-                daily_totals_df = block_data_df.groupby(['DateOnly', 'DayName'])['BlockVolume'].sum().reset_index()
-            
-            for day_name_iter in days_of_week_order:
-                daily_summary[day_name_iter] = {
-                    f"avg_total_daily_volume_last_{num_weeks_for_avg}_occurrences": 0,
-                    f"avg_total_daily_volume_last_{short_term_ma_occurrences}_occurrences": 0,
-                    "last_occurrence_total_daily_volume": 0,
-                    "trend_direction_pct_change": 0.0
+    
+                # Calculate daily total trends
+                daily_totals_df = pd.DataFrame()
+                if not block_data_df.empty:
+                    daily_totals_df = block_data_df.groupby(['DateOnly', 'DayName'])['BlockVolume'].sum().reset_index()
+                
+                for day_name_iter in days_of_week_order:
+                    daily_summary[day_name_iter] = {
+                        f"avg_total_daily_volume_last_{num_weeks_for_avg}_occurrences": 0,
+                        f"avg_total_daily_volume_last_{short_term_ma_occurrences}_occurrences": 0,
+                        "last_occurrence_total_daily_volume": 0,
+                        "trend_direction_pct_change": 0.0
+                    }
+    
+                if not daily_totals_df.empty:
+                    for day_name in daily_totals_df['DayName'].unique():
+                        day_specific_totals = daily_totals_df[daily_totals_df['DayName'] == day_name].sort_values(by='DateOnly', ascending=False)
+                        if not day_specific_totals.empty:
+                            long_term_daily_totals = day_specific_totals.head(num_weeks_for_avg)
+                            short_term_daily_totals = day_specific_totals.head(short_term_ma_occurrences)
+                            
+                            avg_daily_total_long = long_term_daily_totals['BlockVolume'].mean() if not long_term_daily_totals.empty else 0
+                            avg_daily_total_short = short_term_daily_totals['BlockVolume'].mean() if not short_term_daily_totals.empty else 0
+                            last_occurrence_daily_total = day_specific_totals.iloc[0]['BlockVolume']
+    
+                            daily_trend_pct_change = 0.0
+                            if avg_daily_total_long != 0:
+                                daily_trend_pct_change = ((avg_daily_total_short - avg_daily_total_long) / avg_daily_total_long) * 100
+                            elif avg_daily_total_short > 0:
+                                daily_trend_pct_change = 9999.0
+                            
+                            daily_summary[day_name].update({
+                                f"avg_total_daily_volume_last_{num_weeks_for_avg}_occurrences": round(avg_daily_total_long, 2),
+                                f"avg_total_daily_volume_last_{short_term_ma_occurrences}_occurrences": round(avg_daily_total_short, 2),
+                                "last_occurrence_total_daily_volume": round(last_occurrence_daily_total, 2),
+                                "trend_direction_pct_change": round(daily_trend_pct_change, 2)
+                            })
+                
+                # Calculate overall average daily volumes
+                overall_avg_daily_45_days = daily_totals_df['BlockVolume'].mean() if not daily_totals_df.empty else 0
+                avg_daily_volume_rolling_7_days = 0
+                if not daily_totals_df.empty:
+                    daily_totals_sorted_for_rolling = daily_totals_df.sort_values(by='DateOnly')
+                    if len(daily_totals_sorted_for_rolling) >= 1:
+                        avg_daily_volume_rolling_7_days = daily_totals_sorted_for_rolling['BlockVolume'].rolling(window=7, min_periods=1).mean().iloc[-1]
+                    else: 
+                         avg_daily_volume_rolling_7_days = 0
+    
+                print("Historical trend calculation completed.")
+                return {
+                    "reference_date_for_trends": self.target_date.strftime("%Y-%m-%d"),
+                    "trend_period_days": days_prior,
+                    "num_weeks_for_avg": num_weeks_for_avg,
+                    "short_term_ma_occurrences": short_term_ma_occurrences,
+                    "three_hour_block_trends": block_trends,
+                    "daily_summary_trends": dict(daily_summary),
+                    "overall_summary": {
+                        f"avg_daily_volume_last_{days_prior}_days": round(overall_avg_daily_45_days, 2),
+                        "avg_daily_volume_rolling_7_days": round(avg_daily_volume_rolling_7_days, 2) 
+                    }
                 }
-
-            if not daily_totals_df.empty:
-                for day_name in daily_totals_df['DayName'].unique():
-                    day_specific_totals = daily_totals_df[daily_totals_df['DayName'] == day_name].sort_values(by='DateOnly', ascending=False)
-                    if not day_specific_totals.empty:
-                        long_term_daily_totals = day_specific_totals.head(num_weeks_for_avg)
-                        short_term_daily_totals = day_specific_totals.head(short_term_ma_occurrences)
-                        
-                        avg_daily_total_long = long_term_daily_totals['BlockVolume'].mean() if not long_term_daily_totals.empty else 0
-                        avg_daily_total_short = short_term_daily_totals['BlockVolume'].mean() if not short_term_daily_totals.empty else 0
-                        last_occurrence_daily_total = day_specific_totals.iloc[0]['BlockVolume']
-
-                        daily_trend_pct_change = 0.0
-                        if avg_daily_total_long != 0:
-                            daily_trend_pct_change = ((avg_daily_total_short - avg_daily_total_long) / avg_daily_total_long) * 100
-                        elif avg_daily_total_short > 0:
-                            daily_trend_pct_change = 9999.0
-                        
-                        daily_summary[day_name].update({
-                            f"avg_total_daily_volume_last_{num_weeks_for_avg}_occurrences": round(avg_daily_total_long, 2),
-                            f"avg_total_daily_volume_last_{short_term_ma_occurrences}_occurrences": round(avg_daily_total_short, 2),
-                            "last_occurrence_total_daily_volume": round(last_occurrence_daily_total, 2),
-                            "trend_direction_pct_change": round(daily_trend_pct_change, 2)
-                        })
-            
-            # Calculate overall average daily volumes
-            overall_avg_daily_45_days = daily_totals_df['BlockVolume'].mean() if not daily_totals_df.empty else 0
-            avg_daily_volume_rolling_7_days = 0
-            if not daily_totals_df.empty:
-                daily_totals_sorted_for_rolling = daily_totals_df.sort_values(by='DateOnly')
-                if len(daily_totals_sorted_for_rolling) >= 1:
-                    avg_daily_volume_rolling_7_days = daily_totals_sorted_for_rolling['BlockVolume'].rolling(window=7, min_periods=1).mean().iloc[-1]
-                else: 
-                     avg_daily_volume_rolling_7_days = 0
-
-            print("Historical trend calculation completed.")
-            return {
-                "reference_date_for_trends": self.target_date.strftime("%Y-%m-%d"),
-                "trend_period_days": days_prior,
-                "num_weeks_for_avg": num_weeks_for_avg,
-                "short_term_ma_occurrences": short_term_ma_occurrences,
-                "three_hour_block_trends": block_trends,
-                "daily_summary_trends": dict(daily_summary),
-                "overall_summary": {
-                    f"avg_daily_volume_last_{days_prior}_days": round(overall_avg_daily_45_days, 2),
-                    "avg_daily_volume_rolling_7_days": round(avg_daily_volume_rolling_7_days, 2) 
-                }
-            }
-
+    
         except Exception as e:
             print(f"Error in calculate_historical_trends: {str(e)}")
             traceback.print_exc()
@@ -1203,7 +1080,7 @@ class ChargePredictor:
             )
             future_df = pd.DataFrame({'ds': pred_range})
 
-            # Get raw Prophet predictions for HOURLY INCREASES for the next day
+            # Get raw Prophet predictions for HOURLY INCREASES
             forecast_increases = self.prophet_results.predict(future_df)
             base_hourly_increases = forecast_increases['yhat']
             
@@ -1223,7 +1100,7 @@ class ChargePredictor:
 
             # Calculate the final target for the day by blending IPTNW and Prophet's total
             final_daily_target = (prophet_base_daily_total * blend_weight_prophet) + \
-                                 (self.network_prediction * scaling_data['next_day_scaling'] * blend_weight_network)
+                                    (self.network_prediction * scaling_data['next_day_scaling'] * blend_weight_network)
 
             # Recalculate scaling factor to adjust Prophet's hourly increases to meet the `final_daily_target`
             scaling_factor_for_day = 1.0
@@ -1263,8 +1140,331 @@ class ChargePredictor:
         except Exception as e:
             print(f"Error in enhanced next-day prediction (Prophet): {str(e)}")
             traceback.print_exc()
-            return None
-    
+            return pd.DataFrame()
+        
+    def get_shift_volume_from_extended(self, extended_predictions_df, start_dt, end_dt):
+        """
+        Calculates the total predicted volume for a given shift period from the extended_predictions_df.
+        Handles shifts spanning midnight by summing hourly increases within the shift.
+        Assumes extended_predictions_df contains cumulative data that resets at midnight.
+        """
+        if extended_predictions_df.empty:
+            return 0
+
+        # Ensure 'Time_dt' column exists and is datetime
+        if 'Time_dt' not in extended_predictions_df.columns:
+            extended_predictions_df['Time_dt'] = pd.to_datetime(extended_predictions_df['Time'])
+        extended_predictions_df = extended_predictions_df.sort_values(by='Time_dt').reset_index(drop=True)
+
+        # Generate hourly increases from the cumulative predictions
+        hourly_data = []
+        prev_cumulative = 0
+        prev_date = None
+
+        for index, row in extended_predictions_df.iterrows():
+            current_dt = row['Time_dt']
+            current_cumulative = row['Predicted_Workable']
+
+            if prev_date is None or current_dt.date() > prev_date: # New day or first iteration
+                hourly_increase = current_cumulative # First hour's value is its total from reset (00:00)
+            else:
+                hourly_increase = current_cumulative - prev_cumulative
+            
+            hourly_data.append({'Time_dt': current_dt, 'Hourly_Increase': max(0, hourly_increase)})
+            prev_cumulative = current_cumulative # Update for next iteration
+            prev_date = current_dt.date() # Update for next iteration
+
+        hourly_df = pd.DataFrame(hourly_data)
+
+        # Filter for the specific shift duration based on start_dt and end_dt
+        # Use < end_dt to include the start hour but exclude the end hour for 24-hour shifts
+        shift_hourly_increases = hourly_df[
+            (hourly_df['Time_dt'] >= start_dt) & 
+            (hourly_df['Time_dt'] < end_dt)
+        ]
+        
+        return shift_hourly_increases['Hourly_Increase'].sum()
+
+    def generate_llm_feed(self, json_data, current_time):
+        """
+        Generates language-based insights for the LLMfeed section of the VIZ.json.
+        All future-looking metrics are based on the 48-hour rolling predictions.
+        """
+        llm_feed = {
+            "report_timestamp": current_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "overall_report_context": "This report provides an in-depth analysis of daily workload and operational volume for our facility, including historical context, current performance tracking, and future predictions from multiple models.",
+        }
+
+        # --- Current Day Summary ---
+        current_day_data = json_data.get('current_day', {})
+        current_day_date_str = current_day_data.get('date', 'N/A')
+        network_target = current_day_data.get('network_prediction', 0)
+        
+        current_day_prophet_preds = pd.DataFrame(current_day_data.get('sarima_predictions', []))
+        current_day_actuals = pd.DataFrame(current_day_data.get('current_day_data', []))
+        prev_year_current_day_data = pd.DataFrame(current_day_data.get('previous_year_data', []))
+        no_same_day_preds = pd.DataFrame(current_day_data.get('predictions_no_same_day', []))
+
+        current_day_prophet_eod = current_day_prophet_preds['Predicted_Workable'].iloc[-1] if not current_day_prophet_preds.empty else 0
+        
+        model_comparison_to_network = ""
+        if network_target > 0:
+            deviation_pct = ((current_day_prophet_eod - network_target) / network_target) * 100
+            comparison_verb = "above" if deviation_pct >= 0 else "below"
+            model_comparison_to_network = f"Prophet's forecast of {current_day_prophet_eod:,.0f} units is {abs(deviation_pct):.1f}% {comparison_verb} the Network's target of {network_target:,.0f} units."
+        else:
+            model_comparison_to_network = f"Prophet forecasts a total of {current_day_prophet_eod:,.0f} units for today, but no network target was available for comparison."
+
+        actual_volume_progress = "No actual volume data available for today."
+        if not current_day_actuals.empty:
+            last_actual_volume = current_day_actuals['Workable'].iloc[-1]
+            last_actual_time = pd.to_datetime(current_day_actuals['Time'].iloc[-1]).strftime('%H:%M')
+            
+            # Find corresponding Prophet prediction for comparison
+            prophet_at_last_actual_time = 0
+            if not current_day_prophet_preds.empty:
+                prophet_at_last_actual_time_df = current_day_prophet_preds[
+                    pd.to_datetime(current_day_prophet_preds['Time']) == pd.to_datetime(current_day_actuals['Time'].iloc[-1])
+                ]
+                if not prophet_at_last_actual_time_df.empty:
+                    prophet_at_last_actual_time = prophet_at_last_actual_time_df['Predicted_Workable'].iloc[0]
+
+            if prophet_at_last_actual_time > 0:
+                actual_deviation = ((last_actual_volume - prophet_at_last_actual_time) / prophet_at_last_actual_time) * 100
+                tracking_status = "tracking above" if actual_deviation >= 0 else "tracking below"
+                actual_volume_progress = f"Actual volume currently stands at {last_actual_volume:,.0f} units as of {last_actual_time}, {tracking_status} Prophet's prediction for this time by {abs(actual_deviation):.1f}%."
+            else:
+                actual_volume_progress = f"Actual volume currently stands at {last_actual_volume:,.0f} units as of {last_actual_time}."
+
+
+        previous_year_comparison_current_day = "Previous year data for today is not available for comparison."
+        if not prev_year_current_day_data.empty:
+            prev_year_eod_total = prev_year_current_day_data['Workable'].iloc[-1]
+            if prev_year_eod_total > 0:
+                year_on_year_diff_pct = ((current_day_prophet_eod - prev_year_eod_total) / prev_year_eod_total) * 100
+                comparison_word = "higher" if year_on_year_diff_pct >= 0 else "lower"
+                previous_year_comparison_current_day = f"Today's predicted volume for 23:00 ({current_day_prophet_eod:,.0f} units) is {abs(year_on_year_diff_pct):.1f}% {comparison_word} than last year's actual volume on this day ({prev_year_eod_total:,.0f} units)."
+            else:
+                previous_year_comparison_current_day = f"Today's predicted volume for 23:00 is {current_day_prophet_eod:,.0f} units. Previous year's total for this day was not significant for comparison."
+
+        no_same_day_influence_forecast = "Prophet's baseline forecast without real-time adjustments is not available."
+        if not no_same_day_preds.empty:
+            no_same_day_eod_total = no_same_day_preds['Predicted_Workable_No_Same_Day'].iloc[-1]
+            no_same_day_influence_forecast = f"Without real-time adjustments, Prophet's baseline forecast for today was {no_same_day_eod_total:,.0f} units."
+
+
+        llm_feed["current_day_summary_for_llm"] = {
+            "date": current_day_date_str,
+            "network_target_overview": f"The network's daily target for today is {network_target:,.0f} units.",
+            "prophet_predicted_volume": f"Prophet forecasts today's volume to reach approximately {current_day_prophet_eod:,.0f} units by 23:00. The volume is expected to grow steadily throughout the day.",
+            "model_comparison_to_network": model_comparison_to_network,
+            "actual_volume_progress": actual_volume_progress,
+            "previous_year_comparison_current_day": previous_year_comparison_current_day,
+            "no_same_day_influence_forecast": no_same_day_influence_forecast
+        }
+
+        # --- Next Shift Summary (based on 48hr rolling predictions) ---
+        extended_preds_df = pd.DataFrame(json_data.get('extended_predictions', {}).get('predictions', []))
+        
+        # Determine the next immediate shift
+        next_shift_start_dt = None
+        next_shift_end_dt = None
+        next_shift_name = ""
+        
+        # Define potential start times for the next 24-hour period
+        today_06 = current_time.replace(hour=6, minute=0, second=0, microsecond=0)
+        today_18 = current_time.replace(hour=18, minute=0, second=0, microsecond=0)
+        tomorrow_06 = (current_time + timedelta(days=1)).replace(hour=6, minute=0, second=0, microsecond=0)
+        tomorrow_18 = (current_time + timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
+        
+        # Logic to find the *next* shift starting point
+        if current_time < today_06: # Before 6 AM, next is today's Day Shift
+            next_shift_start_dt = today_06
+            next_shift_end_dt = today_06 + timedelta(hours=12) # Ends 18:00 today
+            next_shift_name = "Today's Day Shift"
+        elif current_time < today_18: # Before 6 PM, next is today's Night Shift
+            next_shift_start_dt = today_18
+            next_shift_end_dt = (today_18 + timedelta(hours=12)) # Ends 06:00 tomorrow
+            next_shift_name = "Tonight's Night Shift"
+        elif current_time < tomorrow_06: # After 6 PM, before 6 AM tomorrow, next is tomorrow's Day Shift
+            next_shift_start_dt = tomorrow_06
+            next_shift_end_dt = tomorrow_06 + timedelta(hours=12) # Ends 18:00 tomorrow
+            next_shift_name = "Tomorrow's Day Shift"
+        else: # After 6 AM tomorrow, next is tomorrow's Night Shift
+            next_shift_start_dt = tomorrow_18
+            next_shift_end_dt = (tomorrow_18 + timedelta(hours=12)) # Ends 06:00 day after tomorrow
+            next_shift_name = "Tomorrow Night's Shift"
+
+        next_shift_volume = self.get_shift_volume_from_extended(extended_preds_df, next_shift_start_dt, next_shift_end_dt)
+        next_shift_date_str = next_shift_start_dt.strftime('%Y-%m-%d')
+        
+        previous_year_comparison_next_shift = "Previous year data for this upcoming shift is not available for comparison."
+        # Use the actual next day's previous year data for this shift's comparison
+        # This part requires more precise filtering of previous year's data by shift hours.
+        # For simplicity, will compare against the overall previous year's next day data if available.
+        prev_year_next_day_data = pd.DataFrame(json_data.get('next_day', {}).get('previous_year_data', []))
+        if not prev_year_next_day_data.empty:
+            # Attempt to get previous year's volume for the exact shift timeframe
+            # This requires converting prev_year_next_day_data 'Time' to datetime and then filtering
+            prev_year_next_day_data['Time_dt'] = pd.to_datetime(prev_year_next_day_data['Time'])
+            
+            # Adjust previous year's shift dates to align with next_shift_start_dt's date but prev year's year
+            prev_year_next_shift_start_dt = next_shift_start_dt.replace(year=next_shift_start_dt.year - 1)
+            prev_year_next_shift_end_dt = next_shift_end_dt.replace(year=next_shift_end_dt.year - 1)
+
+            # Filter relevant previous year data for the shift
+            prev_year_shift_data = prev_year_next_day_data[
+                (prev_year_next_day_data['Time_dt'] >= prev_year_next_shift_start_dt) &
+                (prev_year_next_day_data['Time_dt'] < prev_year_next_shift_end_dt) # Use < for end_dt
+            ]
+            
+            if not prev_year_shift_data.empty:
+                # Sum the 'Workable' volumes within that previous year's shift period
+                prev_year_shift_total = prev_year_shift_data['Workable'].sum() # Summing actuals from prev year
+                if prev_year_shift_total > 0:
+                    year_on_year_diff_pct = ((next_shift_volume - prev_year_shift_total) / prev_year_shift_total) * 100
+                    comparison_word = "higher" if year_on_year_diff_pct >= 0 else "lower"
+                    previous_year_comparison_next_shift = f"{next_shift_name}'s predicted volume ({next_shift_volume:,.0f} units) is {abs(year_on_year_diff_pct):.1f}% {comparison_word} than last year's actual volume for the same shift period ({prev_year_shift_total:,.0f} units)."
+                else:
+                    previous_year_comparison_next_shift = f"{next_shift_name}'s predicted volume is {next_shift_volume:,.0f} units. Last year's volume for this shift period was not significant for comparison."
+
+
+        key_trends_next_shift = f"Volume for {next_shift_name} is expected to total approximately {next_shift_volume:,.0f} units. "
+        
+        # Extract hourly progression for the next shift for key trends
+        # Use the hourly_df created in get_shift_volume_from_extended
+        extended_preds_df['Time_dt'] = pd.to_datetime(extended_preds_df['Time'])
+        next_shift_hourly_data_for_trends = extended_preds_df[
+            (extended_preds_df['Time_dt'] >= next_shift_start_dt) & 
+            (extended_preds_df['Time_dt'] < next_shift_end_dt) # Use < for end_dt
+        ].copy()
+
+        if not next_shift_hourly_data_for_trends.empty:
+            # Calculate hourly increases within the shift for trends
+            next_shift_hourly_data_for_trends = next_shift_hourly_data_for_trends.sort_values(by='Time_dt')
+
+            hourly_increases_for_trends = []
+            prev_cumulative_trend = 0
+            prev_date_for_trends = None
+            for idx, row in next_shift_hourly_data_for_trends.iterrows():
+                current_cumulative = row['Predicted_Workable']
+                current_dt_for_trends = row['Time_dt']
+
+                if prev_date_for_trends is None or current_dt_for_trends.date() > prev_date_for_trends:
+                    # New day, first point is itself (relative to 0 reset)
+                    hourly_inc = current_cumulative
+                else:
+                    hourly_inc = current_cumulative - prev_cumulative_trend
+                
+                hourly_increases_for_trends.append({'Time': row['Time'], 'Increase': max(0, hourly_inc)})
+                prev_cumulative_trend = current_cumulative
+                prev_date_for_trends = current_dt_for_trends.date()
+            
+            hourly_increases_df_for_trends = pd.DataFrame(hourly_increases_for_trends)
+
+            if not hourly_increases_df_for_trends.empty:
+                peak_increase_hour = hourly_increases_df_for_trends.loc[hourly_increases_df_for_trends['Increase'].idxmax()]
+                lowest_increase_hour = hourly_increases_df_for_trends.loc[hourly_increases_df_for_trends['Increase'].idxmin()]
+                
+                key_trends_next_shift += f"The period from {pd.to_datetime(next_shift_hourly_data_for_trends['Time'].iloc[0]).strftime('%H:%M')} to {pd.to_datetime(next_shift_hourly_data_for_trends['Time'].iloc[-1]).strftime('%H:%M')} is expected to see a significant progression. "
+                if peak_increase_hour['Increase'] > 0:
+                    key_trends_next_shift += f"The highest hourly activity is forecasted around {pd.to_datetime(peak_increase_hour['Time']).strftime('%H:%M')} with an increase of {peak_increase_hour['Increase']:,.0f} units. "
+                if lowest_increase_hour['Increase'] < 100 and lowest_increase_hour['Increase'] >= 0: # Assuming less than 100 indicates slow
+                     key_trends_next_shift += f"Activity is expected to be slower around {pd.to_datetime(lowest_increase_hour['Time']).strftime('%H:%M')} with an increase of {lowest_increase_hour['Increase']:,.0f} units. "
+        else:
+            key_trends_next_shift += "Detailed hourly progression for this shift is not available in the extended forecast."
+
+
+        llm_feed["next_shift_summary_for_llm"] = {
+            "date": next_shift_date_str,
+            "shift_name": next_shift_name,
+            "predicted_volume": f"The predicted volume for {next_shift_name} is {next_shift_volume:,.0f} units.",
+            "previous_year_comparison": previous_year_comparison_next_shift,
+            "key_trends_next_day": key_trends_next_shift,
+        }
+
+        # --- Extended Rolling Forecast Summary ---
+        extended_forecast_total_volume = extended_preds_df['Predicted_Workable'].iloc[-1] if not extended_preds_df.empty else 0
+        extended_forecast_period = f"The next 48 hours, from {pd.to_datetime(extended_preds_df['Time'].iloc[0]).strftime('%Y-%m-%d %H:%M')} to {pd.to_datetime(extended_preds_df['Time'].iloc[-1]).strftime('%Y-%m-%d %H:%M')}." if not extended_preds_df.empty else "N/A"
+        
+        predicted_progression = f"The 48-hour rolling forecast predicts a total cumulative volume of {extended_forecast_total_volume:,.0f} units by the end of the period. "
+        if not extended_preds_df.empty:
+            predicted_progression += "Volume is expected to reset to zero at each midnight, with predictable growth resuming thereafter. Significant increases are generally seen during the Day Shift hours (06:00-18:00) and Night Shift hours (18:00-06:00)."
+        
+        key_observations = "Predicted volumes remain consistent with recent performance trends for the next two days." # Default, can be enhanced.
+
+        llm_feed["extended_rolling_forecast_summary"] = {
+            "period": extended_forecast_period,
+            "predicted_progression": predicted_progression,
+            "key_observations": key_observations
+        }
+
+        # --- Historical Context Summary ---
+        historical_context = json_data.get('historical_context', {})
+        period_analyzed = f"Last {historical_context.get('trend_period_days', 45)} days."
+        
+        overall_daily_volume_trends = "Overall daily volume trends are not available."
+        if historical_context.get('overall_summary'):
+            avg_45_days = historical_context['overall_summary'].get(f"avg_daily_volume_last_{historical_context.get('trend_period_days', 45)}_days", 0)
+            rolling_7_day_avg = historical_context['overall_summary'].get('avg_daily_volume_rolling_7_days', 0)
+            overall_daily_volume_trends = f"Average daily volume over the last {historical_context.get('trend_period_days', 45)} days was {avg_45_days:,.0f} units, with a rolling 7-day average of {rolling_7_day_avg:,.0f} units."
+
+        day_of_week_trends = {}
+        if historical_context.get('daily_summary_trends'):
+            for day, trends in historical_context['daily_summary_trends'].items():
+                long_term_avg = trends.get(f"avg_total_daily_volume_last_{historical_context.get('num_weeks_for_avg', 6)}_occurrences", 0)
+                trend_pct = trends.get('trend_direction_pct_change', 0.0)
+                trend_direction = "upward trend" if trend_pct >= 0 else "downward trend"
+                if trend_pct == 9999.0:
+                    day_of_week_trends[day] = f"Typically sees {long_term_avg:,.0f} units, showing a very strong upward trend based on recent data availability."
+                else:
+                    day_of_week_trends[day] = f"Typically sees {long_term_avg:,.0f} units, showing a {abs(trend_pct):.2f}% {trend_direction} over recent occurrences."
+
+        notable_block_trends = []
+        if historical_context.get('three_hour_block_trends'):
+            for block_key, trends in historical_context['three_hour_block_trends'].items():
+                trend_pct = trends.get('trend_direction_pct_change', 0.0)
+                if abs(trend_pct) > 10 or trend_pct == 9999.0: # Significant trend threshold
+                    day_name, time_block_suffix = block_key.split('_') # Use _ to split
+                    time_block_start = time_block_suffix[:4]
+                    time_block_end = time_block_suffix[5:9] # Correctly extract end part
+                    
+                    trend_direction = "strong upward trend" if trend_pct >= 0 else "significant downward trend"
+                    if trend_pct == 9999.0:
+                         notable_block_trends.append(f"{day_name}'s {time_block_start[:2]}:{time_block_start[2:]}-{time_block_end[:2]}:{time_block_end[2:]} block has shown a very strong upward trend based on recent data availability.")
+                    else:
+                        notable_block_trends.append(f"{day_name}'s {time_block_start[:2]}:{time_block_start[2:]}-{time_block_end[:2]}:{time_block_end[2:]} block has shown a {abs(trend_pct):.2f}% {trend_direction}.")
+            if not notable_block_trends:
+                notable_block_trends.append("No significant trends observed in specific 3-hour blocks.")
+
+        llm_feed["historical_context_summary_for_llm"] = {
+            "period_analyzed": period_analyzed,
+            "overall_daily_volume_trends": overall_daily_volume_trends,
+            "day_of_week_trends": day_of_week_trends,
+            "notable_block_trends": " ".join(notable_block_trends),
+            "special_event_impact": "Defined holidays (e.g., Christmas, New Year's Day) and periods near them are accounted for in historical trends to capture their known impact on volumes."
+        }
+
+        # --- Model System Details ---
+        prophet_config_details = "Prophet is configured with a changepoint_prior_scale of 0.15 to allow for flexible trend adaptation, and explicitly accounts for daily and weekly seasonality."
+        exogenous_influences_details = "Prophet integrates external data, specifically current Network (IPTNW) and ALPS total forecasts, as guiding influences. This allows the model to refine its own forecasts and potentially surpass their individual accuracy."
+        backtesting_results_overview = "Model performance is rigorously evaluated through backtesting over historical data. The overall average MAPE and other specific error metrics would be included here if provided. Recent performance indicates stronger accuracy."
+        strength_in_adaptability = "The model demonstrates strong adaptability, with recent forecasts showing significantly lower errors, indicating effective learning from current operational patterns. This positions the model to potentially outperform standalone external predictions due to its adaptive nature and integrated learning from multiple data sources."
+
+
+        llm_feed["model_system_details_for_llm"] = {
+            "primary_forecasting_model": "The primary model used for forecasting is Prophet.",
+            "prophet_methodology": "Prophet models hourly 'increases' in volume rather than total cumulative volume. This approach ensures predictions are non-decreasing within a day and reset to zero at midnight, accurately reflecting operational patterns.",
+            "prophet_configuration": prophet_config_details,
+            "exogenous_influences": exogenous_influences_details,
+            "secondary_forecasting_model": "No secondary forecasting model is currently in use for primary predictions.", # Removed RF reference
+            "backtesting_results_overview": backtesting_results_overview,
+            "strength_in_adaptability": strength_in_adaptability
+        }
+
+        return llm_feed
+
+
 
 def check_aws_credentials():
     """Checks if AWS credentials are configured by attempting to get caller identity."""
@@ -1371,7 +1571,6 @@ def main():
         prophet_results_current_day = predictor.predict_for_target_date() 
         
         print("\nGenerating RF predictions for current day (full 24h)...")
-        rf_results = predictor.get_rf_predictions()
         
         # Calculate next day's target date for full 24h predictions
         next_day_target_date = predictor.target_date + timedelta(days=1)
@@ -1407,7 +1606,6 @@ def main():
                 "date": predictor.target_date.strftime("%Y-%m-%d"),
                 "network_prediction": predictor.network_prediction,
                 "sarima_predictions": prophet_results_current_day.to_dict(orient='records') if prophet_results_current_day is not None else [],
-                "rf_predictions": rf_results.to_dict(orient='records') if rf_results is not None else [],
                 "predictions_no_same_day": no_same_day_current.to_dict(orient='records') if no_same_day_current is not None else [],
                 "previous_year_data": prev_year_records,
                 "current_day_data": current_day_records
@@ -1415,7 +1613,6 @@ def main():
             "next_day": {
                 "date": next_day_target_date.strftime("%Y-%m-%d"),
                 "sarima_predictions": next_day_prophet_enhanced.to_dict(orient='records') if next_day_prophet_enhanced is not None else [],
-                "rf_predictions": rf_results.to_dict(orient='records') if rf_results is not None else [], 
                 "previous_year_data": next_day_prev_year_records
             },
             "extended_predictions": {
@@ -1430,7 +1627,6 @@ def main():
             "current_day_final_prophet_total": prophet_results_current_day['Predicted_Workable'].iloc[-1] if prophet_results_current_day is not None and not prophet_results_current_day.empty else 0,
             "next_day_final_prophet_total": next_day_prophet_enhanced['Predicted_Workable'].iloc[-1] if next_day_prophet_enhanced is not None and not next_day_prophet_enhanced.empty else 0,
             "network_prediction_target": predictor.network_prediction,
-            "rf_current_day_final_total": rf_results['RF_Prediction'].iloc[-1] if rf_results is not None and not rf_results.empty else 0,
             "next_day_expected_increase_from_prophet": (next_day_prophet_enhanced['Predicted_Workable'].iloc[-1] - next_day_prophet_enhanced['Predicted_Workable'].iloc[0]) if next_day_prophet_enhanced is not None and not next_day_prophet_enhanced.empty else 0
         }
 
